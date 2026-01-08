@@ -1,14 +1,14 @@
 import unittest
 
-from Classification.Model.XGBoost.XGBoost import XGBoostClassifier
-from Classification.Model.XGBoost.XGBoost import XGBoostParameter
+from Classification.Model.Ensemble.XGBoostModel import XGBoostModel
+from Classification.Parameter.XGBoostParameter import XGBoostParameter
 from test.Classifier.ClassifierTest import ClassifierTest
 
 
 class XGBoostTest(ClassifierTest):
 
     def test_Train(self):
-        xgboost = XGBoostClassifier()
+        xgboost = XGBoostModel()
 
         xgboostParameter = XGBoostParameter(
             seed=1,
