@@ -17,11 +17,40 @@ from Classification.Parameter.XGBoostParameter import XGBoostParameter
 class XGBoostModel(ValidatedModel):
     """
     XGBoost Gradient Boosting Classifier.
+    
+    Attributes
+    ----------
+    __trees : List[XGBoostTree] or List[List[XGBoostTree]]
+        Collection of decision trees. For binary classification, it's a flat list.
+        For multiclass, it's a list of lists where each sublist contains trees for one class.
+    __class_labels : List[str]
+        Distinct class labels from the training set.
+    __n_classes : int
+        Number of distinct classes.
+    __base_score : float
+        Initial prediction score (log odds for binary classification).
+    __parameter : XGBoostParameter
+        Training parameters configuration.
+    __feature_importance : Dict[int, float]
+        Feature importance scores mapping feature index to importance value.
+    __training_history : List[Dict]
+        Training history containing validation metrics per iteration.
     """
+    
+    __trees: List
+    __class_labels: List[str]
+    __n_classes: int
+    __base_score: float
+    __parameter: Optional[XGBoostParameter]
+    __feature_importance: Dict[int, float]
+    __training_history: List[Dict]
     
     def __init__(self):
         """
-        Initialize XGBoost classifier.
+        Initialize XGBoost classifier with empty state.
+        
+        Creates a new XGBoostModel instance with initialized but empty attributes
+        for trees, class labels, and training metrics.
         """
         self.__trees = []
         self.__class_labels = []
@@ -34,6 +63,17 @@ class XGBoostModel(ValidatedModel):
     def __sigmoid(self, x: float) -> float:
         """
         Apply sigmoid function with numerical stability.
+        
+        Parameters
+        ----------
+        x : float
+            Input value to transform.
+        
+        Returns
+        -------
+        float
+            Sigmoid transformation of x, clamped between 0 and 1.
+            Returns 1.0 for x > 20, 0.0 for x < -20 to prevent overflow.
         """
         if x > 20:
             return 1.0
@@ -44,6 +84,17 @@ class XGBoostModel(ValidatedModel):
     def __softmax(self, scores: List[float]) -> List[float]:
         """
         Apply softmax function with numerical stability.
+        
+        Parameters
+        ----------
+        scores : List[float]
+            Raw scores for each class.
+        
+        Returns
+        -------
+        List[float]
+            Normalized probability distribution over classes.
+            Sum of all probabilities equals 1.0.
         """
         max_score = max(scores)
         exp_scores = [exp(s - max_score) for s in scores]
@@ -53,33 +104,69 @@ class XGBoostModel(ValidatedModel):
     def train(self, trainSet: InstanceList, parameters: XGBoostParameter,
               validationSet: Optional[InstanceList] = None) -> None:
         """
-        Train the XGBoost classifier.
+        Train the XGBoost classifier using gradient boosting.
+        
+        Parameters
+        ----------
+        trainSet : InstanceList
+            Training dataset containing labeled instances.
+        parameters : XGBoostParameter
+            Configuration parameters for training (learning rate, max depth, etc.).
+        validationSet : Optional[InstanceList], default=None
+            Optional validation set for early stopping and performance monitoring.
+        
+        Returns
+        -------
+        None
+            Model is trained in-place, modifying internal state.
+        
+        Notes
+        -----
+        - Automatically detects binary vs multiclass classification
+        - Uses early stopping if validation set is provided
+        - Supports instance subsampling for stochastic boosting
         """
         self.__parameter = parameters
         self.__class_labels = trainSet.getDistinctClassLabels()
         self.__n_classes = len(self.__class_labels)
         self.__training_history = []
-        self.__trees = []  # Initialize/reset trees
+        self.__trees = []
         
-        # Set random seed for reproducibility
         random.seed(parameters.getSeed())
         
         if self.__n_classes == 2:
-            # Binary classification
             self.__trainBinary(trainSet, parameters, validationSet)
         else:
-            # Multiclass classification
             self.__trainMulticlass(trainSet, parameters, validationSet)
     
     def __trainBinary(self, trainSet: InstanceList, 
                      parameters: XGBoostParameter,
                      validationSet: Optional[InstanceList] = None) -> None:
         """
-        Train for binary classification.
+        Train for binary classification using logistic loss.
+        
+        Parameters
+        ----------
+        trainSet : InstanceList
+            Training dataset with binary class labels.
+        parameters : XGBoostParameter
+            Training configuration parameters.
+        validationSet : Optional[InstanceList], default=None
+            Optional validation set for early stopping.
+        
+        Returns
+        -------
+        None
+            Updates internal trees and base score.
+        
+        Notes
+        -----
+        - Initializes predictions with log odds of positive class
+        - Uses gradient and hessian of logistic loss
+        - Implements early stopping based on validation error
         """
         n_samples = trainSet.size()
         
-        # Initialize with log odds
         positive_count = sum(1 for i in range(n_samples) 
                             if trainSet.get(i).getClassLabel() == self.__class_labels[1])
         
@@ -92,21 +179,17 @@ class XGBoostModel(ValidatedModel):
         
         predictions = [self.__base_score] * n_samples
         
-        # Early stopping variables
         best_val_error = float('inf')
         rounds_without_improvement = 0
         best_n_trees = 0
         
-        # Boosting iterations
         for iteration in range(parameters.getNEstimators()):
-            # Sample instances
             if parameters.getSubsample() < 1.0:
                 n_subsample = max(1, int(n_samples * parameters.getSubsample()))
                 sample_indices = random.sample(range(n_samples), n_subsample)
             else:
                 sample_indices = list(range(n_samples))
             
-            # Calculate gradients and hessians
             gradients = [0.0] * n_samples
             hessians = [0.0] * n_samples
             
@@ -117,16 +200,13 @@ class XGBoostModel(ValidatedModel):
                 gradients[i] = pred_prob - true_label
                 hessians[i] = max(pred_prob * (1.0 - pred_prob), 1e-6)
             
-            # Build tree
             tree = XGBoostTree(trainSet, gradients, hessians, sample_indices, parameters)
             self.__trees.append(tree)
             
-            # Update predictions
             learning_rate = parameters.getLearningRate()
             for i in range(n_samples):
                 predictions[i] += learning_rate * tree.predictValue(trainSet.get(i))
             
-            # Early stopping check
             if validationSet is not None:
                 val_error = self.__calculateError(validationSet)
                 self.__training_history.append({
@@ -149,23 +229,39 @@ class XGBoostModel(ValidatedModel):
                          parameters: XGBoostParameter,
                          validationSet: Optional[InstanceList] = None) -> None:
         """
-        Train for multiclass classification.
+        Train for multiclass classification using softmax loss.
+        
+        Parameters
+        ----------
+        trainSet : InstanceList
+            Training dataset with multiple class labels.
+        parameters : XGBoostParameter
+            Training configuration parameters.
+        validationSet : Optional[InstanceList], default=None
+            Optional validation set for early stopping.
+        
+        Returns
+        -------
+        None
+            Updates internal trees structure (one tree list per class).
+        
+        Notes
+        -----
+        - Uses one-vs-all approach with softmax probabilities
+        - Trains separate tree ensemble for each class
+        - Gradient and hessian computed from softmax derivatives
         """
         n_samples = trainSet.size()
         
-        # Initialize predictions for each class
         predictions = [[0.0 for _ in range(n_samples)] for _ in range(self.__n_classes)]
         
-        # Initialize trees as list of lists
         self.__trees = [[] for _ in range(self.__n_classes)]
         
-        # Early stopping variables
         best_val_error = float('inf')
         rounds_without_improvement = 0
         best_n_trees = 0
         
         for iteration in range(parameters.getNEstimators()):
-            # Sample instances
             if parameters.getSubsample() < 1.0:
                 n_subsample = max(1, int(n_samples * parameters.getSubsample()))
                 sample_indices = random.sample(range(n_samples), n_subsample)
@@ -175,7 +271,6 @@ class XGBoostModel(ValidatedModel):
             for class_idx in range(self.__n_classes):
                 target_class = self.__class_labels[class_idx]
                 
-                # Calculate gradients and hessians
                 gradients = [0.0] * n_samples
                 hessians = [0.0] * n_samples
                 
@@ -189,16 +284,13 @@ class XGBoostModel(ValidatedModel):
                     gradients[i] = pred_prob - true_label
                     hessians[i] = max(pred_prob * (1.0 - pred_prob), 1e-6)
                 
-                # Build tree
                 tree = XGBoostTree(trainSet, gradients, hessians, sample_indices, parameters)
                 self.__trees[class_idx].append(tree)
                 
-                # Update predictions
                 learning_rate = parameters.getLearningRate()
                 for i in range(n_samples):
                     predictions[class_idx][i] += learning_rate * tree.predictValue(trainSet.get(i))
             
-            # Early stopping check
             if validationSet is not None:
                 val_error = self.__calculateError(validationSet)
                 self.__training_history.append({
@@ -220,7 +312,17 @@ class XGBoostModel(ValidatedModel):
     
     def __calculateError(self, testSet: InstanceList) -> float:
         """
-        Calculate classification error.
+        Calculate classification error rate on a dataset.
+        
+        Parameters
+        ----------
+        testSet : InstanceList
+            Dataset to evaluate predictions on.
+        
+        Returns
+        -------
+        float
+            Error rate as fraction of misclassified instances (range: 0.0 to 1.0).
         """
         n_errors = 0
         for i in range(testSet.size()):
@@ -232,11 +334,24 @@ class XGBoostModel(ValidatedModel):
     
     def predict(self, instance: Instance) -> str:
         """
-        Predict class label.
+        Predict the class label for a single instance.
+        
+        Parameters
+        ----------
+        instance : Instance
+            Input instance to classify.
+        
+        Returns
+        -------
+        str
+            Predicted class label.
+        
+        Notes
+        -----
+        - For binary: returns class with probability >= 0.5
+        - For multiclass: returns class with highest score
         """
-        # Check if multiclass (list of lists) or binary (flat list)
         if self.__trees and isinstance(self.__trees[0], list):
-            # Multiclass
             scores = [0.0] * self.__n_classes
             learning_rate = self.__parameter.getLearningRate()
             
@@ -247,7 +362,6 @@ class XGBoostModel(ValidatedModel):
             max_idx = scores.index(max(scores))
             return self.__class_labels[max_idx]
         else:
-            # Binary
             score = self.__base_score
             learning_rate = self.__parameter.getLearningRate()
             
@@ -259,10 +373,20 @@ class XGBoostModel(ValidatedModel):
     
     def predictProbability(self, instance: Instance) -> Dict[str, float]:
         """
-        Predict probability distribution.
+        Predict probability distribution over all classes.
+        
+        Parameters
+        ----------
+        instance : Instance
+            Input instance to get probability predictions for.
+        
+        Returns
+        -------
+        Dict[str, float]
+            Dictionary mapping each class label to its predicted probability.
+            Probabilities sum to 1.0.
         """
         if self.__trees and isinstance(self.__trees[0], list):
-            # Multiclass
             scores = [0.0] * self.__n_classes
             learning_rate = self.__parameter.getLearningRate()
             
@@ -273,7 +397,6 @@ class XGBoostModel(ValidatedModel):
             probs = self.__softmax(scores)
             return {self.__class_labels[i]: probs[i] for i in range(self.__n_classes)}
         else:
-            # Binary
             score = self.__base_score
             learning_rate = self.__parameter.getLearningRate()
             
@@ -288,19 +411,46 @@ class XGBoostModel(ValidatedModel):
     
     def getTrainingHistory(self) -> List[Dict]:
         """
-        Get training history.
+        Get the training history with validation metrics.
+        
+        Returns
+        -------
+        List[Dict]
+            List of dictionaries containing iteration number and validation error.
+            Empty list if no validation set was used during training.
         """
         return self.__training_history
     
     def getFeatureImportance(self) -> Dict[int, float]:
         """
         Get feature importance scores.
+        
+        Returns
+        -------
+        Dict[int, float]
+            Dictionary mapping feature indices to their importance scores.
+            Currently returns empty dict (feature not yet implemented).
         """
         return self.__feature_importance
     
     def loadModel(self, fileName: str) -> None:
         """
-        Load model from file.
+        Load a trained model from a file.
+        
+        Parameters
+        ----------
+        fileName : str
+            Path to the file containing the serialized model.
+        
+        Returns
+        -------
+        None
+            Model state is loaded in-place.
+        
+        Raises
+        ------
+        IOError
+            If file cannot be read or model data is corrupted.
         """
         import pickle
         try:
@@ -316,7 +466,22 @@ class XGBoostModel(ValidatedModel):
     
     def saveModel(self, fileName: str) -> None:
         """
-        Save model to file.
+        Save the trained model to a file.
+        
+        Parameters
+        ----------
+        fileName : str
+            Path where the model should be saved.
+        
+        Returns
+        -------
+        None
+            Model is serialized and written to disk.
+        
+        Raises
+        ------
+        IOError
+            If file cannot be written or serialization fails.
         """
         import pickle
         try:
