@@ -21,7 +21,7 @@ class XGBoostTree(DecisionTree):
     feature subsampling.
     
     Attributes:
-        _DecisionTree__root (XGBoostNode): Root node of the decision tree
+        _root (XGBoostNode): Root node of the decision tree
     """
     
     def __init__(self, data: InstanceList, 
@@ -41,15 +41,15 @@ class XGBoostTree(DecisionTree):
                 including max depth, regularization, and feature sampling
         """
         # Determine feature subset for this tree (colsample_bytree)
-        feature_subset = None
+        _feature_subset = None
         if parameter and parameter.getColsampleByTree() < 1.0:
             n_features = data.get(0).attributeSize()
             n_sample = max(1, int(n_features * parameter.getColsampleByTree()))
-            feature_subset = random.sample(range(n_features), n_sample)
+            _feature_subset = random.sample(range(n_features), n_sample)
         
-        root = XGBoostNode(data, gradients, hessians, instance_indices, 
-                          None, parameter, 0, feature_subset)
-        self._DecisionTree__root = root
+        _root = XGBoostNode(data, gradients, hessians, instance_indices, 
+                           None, parameter, 0, _feature_subset)
+        self._DecisionTree__root = _root
     
     def predictValue(self, instance: Instance) -> float:
         """
