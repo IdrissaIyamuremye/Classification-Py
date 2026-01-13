@@ -14,6 +14,14 @@ from Classification.Parameter.XGBoostParameter import XGBoostParameter
 class XGBoostTree(DecisionTree):
     """
     Single tree in the XGBoost ensemble.
+    
+    This class represents an individual decision tree used in the XGBoost
+    gradient boosting ensemble. It extends the DecisionTree class with
+    XGBoost-specific functionality including gradient-based splits and
+    feature subsampling.
+    
+    Attributes:
+        _DecisionTree__root (XGBoostNode): Root node of the decision tree
     """
     
     def __init__(self, data: InstanceList, 
@@ -23,6 +31,14 @@ class XGBoostTree(DecisionTree):
                  parameter: XGBoostParameter):
         """
         Initialize XGBoost tree with gradient information.
+        
+        Args:
+            data (InstanceList): Training instances for building the tree
+            gradients (List[float]): First-order gradient values for each instance
+            hessians (List[float]): Second-order gradient (Hessian) values for each instance
+            instance_indices (List[int]): Indices of instances to use for this tree
+            parameter (XGBoostParameter): Hyperparameters controlling tree construction
+                including max depth, regularization, and feature sampling
         """
         # Determine feature subset for this tree (colsample_bytree)
         feature_subset = None
@@ -38,5 +54,16 @@ class XGBoostTree(DecisionTree):
     def predictValue(self, instance: Instance) -> float:
         """
         Predict the raw value for gradient boosting.
+        
+        This method traverses the tree to find the leaf node corresponding
+        to the given instance and returns its predicted value (weight).
+        The returned value is used as an additive update in the gradient
+        boosting process.
+        
+        Args:
+            instance (Instance): Instance to predict the value for
+            
+        Returns:
+            float: Raw predicted value (leaf weight) from this tree
         """
         return self._DecisionTree__root.predictLeafValue(instance)

@@ -9,6 +9,10 @@ class XGBoostParameter(Parameter):
     """
     Parameter class for XGBoost algorithm.
     
+    This class encapsulates all hyperparameters used in the XGBoost gradient
+    boosting implementation, including learning rate, tree structure parameters,
+    regularization terms, and sampling ratios.
+    
     Attributes:
         __learning_rate (float): Step size shrinkage to prevent overfitting (0 < eta <= 1)
         __n_estimators (int): Number of boosting rounds (trees)
@@ -37,17 +41,27 @@ class XGBoostParameter(Parameter):
         Initialize XGBoost parameters with validation.
         
         Args:
-            seed (int): Random seed for reproducibility.
-            learning_rate (float): Step size shrinkage to prevent overfitting (0 < eta <= 1)
-            n_estimators (int): Number of boosting rounds (trees)
-            max_depth (int): Maximum depth of trees
-            min_child_weight (float): Minimum sum of instance weight needed in a child
-            gamma (float): Minimum loss reduction required for split
-            subsample (float): Subsample ratio of training instances (0 < ratio <= 1)
-            colsample_bytree (float): Subsample ratio of columns when constructing each tree
-            reg_lambda (float): L2 regularization term on weights
-            reg_alpha (float): L1 regularization term on weights
-            early_stopping_rounds (int): Stop if no improvement for N rounds
+            seed (int): Random seed for reproducibility
+            learning_rate (float, optional): Step size shrinkage to prevent overfitting. 
+                Must be in (0, 1]. Defaults to 0.3
+            n_estimators (int, optional): Number of boosting rounds (trees). 
+                Must be at least 1. Defaults to 100
+            max_depth (int, optional): Maximum depth of trees. 
+                Must be at least 1. Defaults to 6
+            min_child_weight (float, optional): Minimum sum of instance weight (hessian) 
+                needed in a child. Must be non-negative. Defaults to 0.0
+            gamma (float, optional): Minimum loss reduction required to make a split. 
+                Must be non-negative. Defaults to 0.0
+            subsample (float, optional): Subsample ratio of training instances. 
+                Must be in (0, 1]. Defaults to 1.0
+            colsample_bytree (float, optional): Subsample ratio of columns when 
+                constructing each tree. Must be in (0, 1]. Defaults to 1.0
+            reg_lambda (float, optional): L2 regularization term on weights. 
+                Must be non-negative. Defaults to 0.0
+            reg_alpha (float, optional): L1 regularization term on weights. 
+                Must be non-negative. Defaults to 0.0
+            early_stopping_rounds (int, optional): Number of rounds with no improvement 
+                after which training will stop. Defaults to 10
         
         Raises:
             ValueError: If parameters are out of valid ranges
@@ -86,41 +100,91 @@ class XGBoostParameter(Parameter):
         self.__early_stopping_rounds = early_stopping_rounds
     
     def getLearningRate(self) -> float:
-        """Return the learning rate (eta)."""
+        """
+        Return the learning rate (eta).
+        
+        Returns:
+            float: Learning rate value in (0, 1]
+        """
         return self.__learning_rate
     
     def getNEstimators(self) -> int:
-        """Return the number of boosting rounds (trees)."""
+        """
+        Return the number of boosting rounds (trees).
+        
+        Returns:
+            int: Number of trees to build in the ensemble
+        """
         return self.__n_estimators
     
     def getMaxDepth(self) -> int:
-        """Return the maximum depth of trees."""
+        """
+        Return the maximum depth of trees.
+        
+        Returns:
+            int: Maximum depth allowed for each tree
+        """
         return self.__max_depth
     
     def getMinChildWeight(self) -> float:
-        """Return the minimum sum of instance weight needed in a child."""
+        """
+        Return the minimum sum of instance weight needed in a child.
+        
+        Returns:
+            float: Minimum sum of hessian values required in a child node
+        """
         return self.__min_child_weight
     
     def getGamma(self) -> float:
-        """Return the minimum loss reduction required for split."""
+        """
+        Return the minimum loss reduction required for split.
+        
+        Returns:
+            float: Minimum gain required to make a split
+        """
         return self.__gamma
     
     def getSubsample(self) -> float:
-        """Return the subsample ratio of training instances."""
+        """
+        Return the subsample ratio of training instances.
+        
+        Returns:
+            float: Proportion of instances to sample for each tree in (0, 1]
+        """
         return self.__subsample
     
     def getColsampleByTree(self) -> float:
-        """Return the subsample ratio of columns when constructing each tree."""
+        """
+        Return the subsample ratio of columns when constructing each tree.
+        
+        Returns:
+            float: Proportion of features to sample for each tree in (0, 1]
+        """
         return self.__colsample_bytree
     
     def getRegLambda(self) -> float:
-        """Return the L2 regularization term on weights."""
+        """
+        Return the L2 regularization term on weights.
+        
+        Returns:
+            float: L2 regularization parameter (ridge penalty)
+        """
         return self.__reg_lambda
     
     def getRegAlpha(self) -> float:
-        """Return the L1 regularization term on weights."""
+        """
+        Return the L1 regularization term on weights.
+        
+        Returns:
+            float: L1 regularization parameter (lasso penalty)
+        """
         return self.__reg_alpha
     
     def getEarlyStoppingRounds(self) -> int:
-        """Return the number of rounds for early stopping."""
+        """
+        Return the number of rounds for early stopping.
+        
+        Returns:
+            int: Number of consecutive rounds without improvement before stopping
+        """
         return self.__early_stopping_rounds

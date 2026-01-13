@@ -13,6 +13,16 @@ class XGBoostNode(DecisionNode):
     """
     Extended DecisionNode for XGBoost that supports gradient-based splits.
     Implements XGBoost-specific splitting logic with proper regularization.
+    
+    Attributes:
+        EPSILON (float): Numerical stability constant
+        __gradients (List[float]): Gradient values for instances
+        __hessians (List[float]): Hessian values for instances
+        __instance_indices (List[int]): Indices of instances in this node
+        __parameter (XGBoostParameter): XGBoost hyperparameters
+        __depth (int): Current depth of the node in the tree
+        __leaf_value (float): Predicted value for leaf nodes
+        __feature_subset (Optional[List[int]]): Subset of features to consider for splitting
     """
     
     EPSILON = 1e-10  # For numerical stability
@@ -27,6 +37,16 @@ class XGBoostNode(DecisionNode):
                  feature_subset: Optional[List[int]] = None):
         """
         Initialize XGBoost decision node with gradient and hessian information.
+        
+        Args:
+            data (InstanceList): Training instances
+            gradients (List[float]): Gradient values
+            hessians (List[float]): Hessian values
+            instance_indices (List[int]): Indices of instances in this node
+            condition: Split condition for this node
+            parameter (XGBoostParameter): Hyperparameters
+            depth (int): Current tree depth
+            feature_subset (Optional[List[int]]): Features to consider
         """
         self.__gradients = gradients
         self.__hessians = hessians
@@ -107,6 +127,16 @@ class XGBoostNode(DecisionNode):
                        parameter: XGBoostParameter) -> None:
         """
         Find the best split using XGBoost's gain formula.
+        
+        Args:
+            data (InstanceList): Training instances
+            gradients (List[float]): Gradient values
+            hessians (List[float]): Hessian values
+            instance_indices (List[int]): Indices of instances to split
+            parameter (XGBoostParameter): Hyperparameters
+            
+        Returns:
+            None: Updates node children if beneficial split found
         """
         from Classification.Attribute.ContinuousAttribute import ContinuousAttribute
         from Classification.Attribute.DiscreteAttribute import DiscreteAttribute
@@ -263,6 +293,12 @@ class XGBoostNode(DecisionNode):
     def predictLeafValue(self, instance: Instance) -> float:
         """
         Predict the leaf value (weight) for the given instance.
+        
+        Args:
+            instance (Instance): Instance to predict
+            
+        Returns:
+            float: Predicted leaf value (weight) for this instance
         """
         if self.leaf:
             return self.__leaf_value
